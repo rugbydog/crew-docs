@@ -31,6 +31,16 @@ Signal groups use sender keys separate from DM safety numbers. Agimus's sender k
 - **Never use `quitGroup` via signal-cli for troubleshooting** — it creates a ban state. Have the admin do a remove/re-add instead.
 - After any signal-cli restart, expect potential sender key issues in groups.
 
+### 4. Billing Flood → Repeated Sender Key Desyncs
+An API billing error triggering a retry loop flooded the group with hundreds of error messages. The cascade caused multiple signal-cli gateway restarts, each rotating safety numbers and disrupting sender keys. This required repeated remove/re-add cycles to restore visibility.
+
+**Fix:** Remove and re-add the affected member (via invite link, not direct add). Check for safety number banners in Signal after each re-add.
+
+**Prevention:**
+- OpenClaw should **halt and notify once** on billing errors — not retry in a loop. A circuit breaker config is needed.
+- If all AI instances share the same API key/pool, one instance running a retry storm can exhaust credits for all.
+- After any billing disruption, expect sender key desyncs requiring re-add.
+
 ---
 
 ## Diagnostic Checklist
@@ -38,10 +48,11 @@ Signal groups use sender keys separate from DM safety numbers. Agimus's sender k
 If a member's messages aren't appearing in a group:
 
 1. **Check `dmScope`** — should be `main` in `openclaw.json`
-2. **Check for "message could not be delivered" errors** in Signal — indicates safety number change; verify the contact's safety number
+2. **Check for "message could not be delivered" errors** in Signal — indicates safety number change; verify the contact's safety number (check DMs and group context)
 3. **Check banned members list** in group settings (Signal app → group → settings → banned members) — easy to overlook
-4. **If still stuck:** remove the member from the group and re-add — forces fresh sender key distribution
-5. **Do NOT use `quitGroup` via signal-cli** — use admin remove/re-add instead
+4. **After billing disruptions** — expect sender key desyncs; check for safety number banners first, then force-close/reopen Signal, then remove/re-add
+5. **If still stuck:** remove the member from the group and re-add via invite link — forces fresh sender key distribution
+6. **Do NOT use `quitGroup` via signal-cli** — use admin remove/re-add instead
 
 ---
 
@@ -51,7 +62,8 @@ If a member's messages aren't appearing in a group:
 |-------|-----|---------------|
 | Safety number change | Accept new safety number in Signal | None |
 | dmScope routing bug | `session.dmScope = "main"` | openclaw.json |
-| Stale sender key / ban | Admin remove + re-add | None |
+| Stale sender key / ban | Admin remove + re-add via invite link | None |
+| Billing flood → key desync | Safety number accept + remove/re-add | Add circuit breaker to OpenClaw config |
 
 ---
 
